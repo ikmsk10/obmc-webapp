@@ -10,7 +10,7 @@ class HelloWorld: public Fastcgipp::Request<wchar_t>
     //! [Response definition]
     bool response()
     {
-        out << "<html><head></head><body></body></html>"
+        out << "<html><head></head><body></body></html>";
         return true;
     }
 };

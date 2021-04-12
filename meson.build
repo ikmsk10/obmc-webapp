@@ -52,8 +52,6 @@ incdir = include_directories('include')
 # Get the options and enable the respective features
 ## create a MAP of  "options : feature_flag"
 
-feature_map = {
-}
 
 logging_levels = {
   'emerg': '-DBMC_LOGGING_EMERGENCY',
@@ -65,27 +63,6 @@ logging_levels = {
   'info': '-DBMC_LOGGING_INFO',
   'debug': '-DBMC_LOGGING_DEBUG',
 }
-# Get the options status and build a project summary to show which flags are
-# being enabled during the configuration time.
-
-foreach option_key,option_value : feature_map
-  if(get_option(option_key).enabled())
-    if(option_key == 'mutual-tls-auth' or option_key == 'insecure-disable-ssl')
-      if(get_option('insecure-disable-ssl').disabled() or get_option('mutual-tls-auth').disabled())
-        add_project_arguments(option_value,language:'cpp')
-        summary(option_key,option_value, section : 'Enabled Features')
-      endif
-    else
-      summary(option_key,option_value, section : 'Enabled Features')
-      add_project_arguments(option_value,language:'cpp')
-    endif
-  else
-      if(option_key == 'insecure-disable-ssl')
-        summary('ssl','-DBMC_ENABLE_SSL', section : 'Enabled Features')
-        add_project_arguments('-DBMC_ENABLE_SSL', language : 'cpp')
-      endif
-  endif
-endforeach
 
 if(get_option('tests').enabled())
   summary('unittest','NA', section : 'Enabled Features')
@@ -178,6 +155,7 @@ if (cxx.get_id() == 'gcc' and cxx.version().version_compare('>8.0'))
       if cxx.has_link_argument('-Wl,--exclude-libs,ALL')
         add_project_link_arguments('-Wl,--exclude-libs,ALL', language: 'cpp')
       endif
+    endif
   endif
 
   add_project_arguments(
@@ -222,30 +200,17 @@ obmc_webserver_dependencies = []
 pam = cxx.find_library('pam', required: get_option('pam'))
 atomic =  cxx.find_library('atomic', required: true)
 openssl = dependency('openssl', required : true)
-obmc_webserver_dependencies += [pam, atomic, openssl]
+sdbusplus = dependency('sdbusplus', required : true)
+systemd = dependency('systemd', required : true)
+zlib = dependency('zlib', required : true)
+fastcgipp = cxx.find_library('fastcgipp', required : true)
 
-sdbusplus = dependency('sdbusplus',required : false)
-if not sdbusplus.found()
-  sdbusplus_proj = subproject('sdbusplus', required: true)
-  sdbusplus = sdbusplus_proj.get_variable('sdbusplus_dep')
-  sdbusplus = sdbusplus.as_system('system')
-endif
-obmc_webserver_dependencies += sdbusplus
-
-systemd = dependency('systemd')
-zlib = dependency('zlib')
-obmc_webserver_dependencies += [systemd, zlib]
+obmc_webserver_dependencies += [pam, atomic, openssl, systemd, zlib, sdbusplus, fastcgipp]
 
 if cxx.has_header('nlohmann/json.hpp')
     nlohmann_json = declare_dependency()
 else
-    subproject('nlohmann', required: false)
-    nlohmann_json = declare_dependency(
-        include_directories: [
-            'subprojects/nlohmann/single_include',
-            'subprojects/nlohmann/single_include/nlohmann',
-        ]
-    )
+    nlohmann_json = dependency('nlohmann-json')
 endif
 obmc_webserver_dependencies += nlohmann_json
 
@@ -258,11 +223,8 @@ srcfiles_unittest = []
 # Gather the Configuration data
 
 conf_data = configuration_data()
-conf_data.set('BMC_HTTP_REQ_BODY_LIMIT_MB',get_option('http-body-limit'))
-conf_data.set('BMC_CONNECTION_COUNT_LIMIT',get_option('connection-count-limit'))
 conf_data.set('MESON_INSTALL_PREFIX',get_option('prefix'))
-configure_file(output: 'config.h',
-               configuration: conf_data)
+configure_file(output: 'config.h', configuration: conf_data)
 
 # Configure and install systemd unit files
 
