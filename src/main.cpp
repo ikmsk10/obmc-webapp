@@ -1,39 +1,19 @@
-//! See https://isatec.ca/fastcgipp/helloWorld.html
-//! [Request definition]
-#include <fastcgi++/request.hpp>
-//! [Request definition]
-#include <fastcgi++/request.hpp>
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (C) 2021 YADRO
 
-class HelloWorld: public Fastcgipp::Request<wchar_t>
-{
-    //! [Request definition]
-    //! [Response definition]
-    bool response()
-    {
-        out << "<html><head></head><body></body></html>";
-        return true;
-    }
-};
-//! [Return]
+#include <string>
+#include <ctype.h>
+#include <fstream>
 
-//! [Manager]
-#include <fastcgi++/manager.hpp>
+#include <core/application.hpp>
+#include <config.h>
 
 int main()
 {
-    Fastcgipp::Manager<HelloWorld> manager;
-    //! [Manager]
-    //! [Signals]
-    manager.setupSignals();
-    //! [Signals]
-    //! [Listen]
-    manager.listen();
-    //! [Listen]
-    //! [Start]
-    manager.start();
-    //! [Start]
-    //! [Join]
-    manager.join();
+    app::core::Application app;
 
-    return 0;
+	app.configure();
+	app.start();
+
+	return EXIT_SUCCESS;
 }

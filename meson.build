@@ -1,9 +1,9 @@
 project('obmc-webserver', 'cpp',
         version : '1.0',
-        meson_version: '>=0.53.2',
+        meson_version: '>=0.55.0',
         default_options: [
             'werror=true',
-            'warning_level=3',
+            'warning_level=4',
             'cpp_std=c++2a',
             'buildtype=debugoptimized',
             'b_ndebug=if-release',
@@ -19,6 +19,8 @@ project_pretty_name = 'obmc-webserver'
 project_url = 'https://github.com/openbmc/' + project_pretty_name
 project_issues_url = project_url + '/issues/new'
 summary('Issues',project_issues_url, section: 'Report Issues')
+
+cmake = import('cmake')
 
 # Validate the c++ Standard
 
@@ -47,7 +49,7 @@ endif
 
 # Include Directories
 
-incdir = include_directories('include')
+incdir = include_directories('include', 'src')
 
 # Get the options and enable the respective features
 ## create a MAP of  "options : feature_flag"
@@ -200,30 +202,86 @@ obmc_webserver_dependencies = []
 pam = cxx.find_library('pam', required: get_option('pam'))
 atomic =  cxx.find_library('atomic', required: true)
 openssl = dependency('openssl', required : true)
-sdbusplus = dependency('sdbusplus', required : true)
+threads = dependency('threads')
+
+# sdbusplus = dependency('sdbusplus',required : false)
+# if not sdbusplus.found()
+#   sdbusplus_proj = subproject('sdbusplus', required: true)
+#   sdbusplus = sdbusplus_proj.get_variable('sdbusplus_dep')
+#   sdbusplus = sdbusplus.as_system('system')
+# endif
+# obmc_webserver_dependencies += sdbusplus
+
 systemd = dependency('systemd', required : true)
 zlib = dependency('zlib', required : true)
-fastcgipp = cxx.find_library('fastcgipp', required : true)
 
-obmc_webserver_dependencies += [pam, atomic, openssl, systemd, zlib, sdbusplus, fastcgipp]
+fastcgipp = cxx.find_library('fastcgipp', required : false)
+if not fastcgipp.found()
+  fastcgipp_cmake_opt = cmake.subproject_options()
+  fastcgipp_cmake_opt.append_compile_args('cpp', '-Wno-error=unused-parameter')
+  fastcgipp_proj  = cmake.subproject('fastcgi++', options: fastcgipp_cmake_opt, required: true)
+  fastcgipp = fastcgipp_proj.dependency('fastcgipp')
+endif
+obmc_webserver_dependencies += fastcgipp
+
+graphqlparser = cxx.find_library('graphqlparser', required : false)
+if not graphqlparser.found()
+  graphqlparser_cmake_opt = cmake.subproject_options()
+  graphqlparser_cmake_opt.append_compile_args('cpp', '-Wno-error=unused-parameter')
+  graphqlparser = cmake.subproject('graphqlparser', options: graphqlparser_cmake_opt, required: true)
+  graphqlparser = graphqlparser.dependency('graphqlparser')
+  graphqlparser_inc = declare_dependency(
+    include_directories: ['subprojects', 'subprojects/graphqlparser']
+  )
+endif
+obmc_webserver_dependencies += [graphqlparser, graphqlparser_inc]
+
+obmc_webserver_dependencies += [atomic, openssl, systemd, zlib, threads]
 
 if cxx.has_header('nlohmann/json.hpp')
     nlohmann_json = declare_dependency()
 else
-    nlohmann_json = dependency('nlohmann-json')
+    subproject('nlohmann', required: false)
+    nlohmann_json = declare_dependency(
+        include_directories: [
+            'subprojects/nlohmann/single_include',
+            'subprojects/nlohmann/single_include/nlohmann',
+        ]
+    )
 endif
 obmc_webserver_dependencies += nlohmann_json
 
+if get_option('tests').enabled()
+  gtest = dependency('gtest', main: true,disabler: true, required : false)
+  gmock = dependency('gmock', required : false)
+  if not gtest.found() and get_option('tests').enabled()
+    gtest_proj = subproject('gtest', required: true)
+    gtest = gtest_proj.get_variable('gtest_main_dep')
+    gmock = gtest_proj.get_variable('gmock_dep')
+  endif
+endif
+
 # Source files
 
-srcfiles_obmc_webserver = ['src/main.cpp']
+srcfiles_obmc_webserver = [
+  'src/main.cpp',
+  'src/core/application.cpp',
+  'src/core/connection.cpp',
+  'src/core/response.cpp',
+  'src/core/request.cpp',
+  'src/core/router.cpp',
+  'src/routes.cpp',
+]
 
-srcfiles_unittest = []
+srcfiles_unittest = [
+  'tests/http/headers_utest.cpp'
+]
 
 # Gather the Configuration data
 
 conf_data = configuration_data()
 conf_data.set('MESON_INSTALL_PREFIX',get_option('prefix'))
+conf_data.set('HTTP_REQ_BODY_LIMIT_MB',get_option('http-body-limit'))
 configure_file(output: 'config.h', configuration: conf_data)
 
 # Configure and install systemd unit files
@@ -238,21 +296,9 @@ summary({
           'systemd unit directory' : systemd_system_unit_dir
         }, section : 'Directories')
 
-configure_file(input : 'obmc-webserver.socket',
-               output : 'obmc-webserver.socket',
-               copy : true,
-               install_dir: systemd_system_unit_dir,
-               install : true)
-
-configure_file(input : 'obmc-webserver.service.in',
-               output : 'obmc-webserver.service',
-               install_dir: systemd_system_unit_dir,
-               configuration: conf_data,
-               install : true)
-
 # Copy pam-webserver to etc/pam.d
 configure_file(input : 'pam-webserver',
-               output : 'webserver',
+               output : 'obmc-webserver',
                copy : true,
                install_dir: '/etc/pam.d',
                install : true)
@@ -273,6 +319,6 @@ if(get_option('tests').enabled())
     test(testname,executable(testname,src_test,
                 include_directories : incdir,
                 install_dir: bindir,
-                dependencies: [ gtest,openssl,gmock,nlohmann_json,sdbusplus ]))
+                dependencies: [ gtest,openssl,gmock,nlohmann_json,fastcgipp, ]))
   endforeach
 endif

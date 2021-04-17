@@ -2,3 +2,4 @@ option('pam', type: 'feature', value : 'enabled', description : 'Built static li
 option('yocto-deps', type: 'feature', value: 'disabled', description : 'Use YOCTO dependencies system')
 option ('tests', type : 'feature', value : 'enabled', description : 'Enable Unit tests for obmc-webserver')
 option('bmc-logging', type : 'combo', choices: ['emerg','alert','critical','error','warning','notice','info','debug'], value : 'error', description : 'Set the log level')
+option('http-body-limit', type: 'integer', min : 0, max : 512, value : 30, description : 'Specifies the http request body length limit')

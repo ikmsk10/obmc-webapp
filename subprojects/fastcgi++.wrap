@@ -1,0 +1,7 @@
+[wrap-git]
+revision = 1bd1ea837370d3e93139c8f3014fd115a71665ec
+url = https://github.com/eddic/fastcgipp.git
+buildsystem = cmake
+
+[provide]
+fastcgi++ = fastcgipp
